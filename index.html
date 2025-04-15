@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yasin's Offline Invoice Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom Styles */
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font as requested */
+        }
+        /* Styles for printing */
+        @media print {
+            body * {
+                visibility: hidden; /* Hide everything by default */
+            }
+            #invoice-print-area, #invoice-print-area * {
+                visibility: visible; /* Show only the invoice area */
+            }
+            #invoice-print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .no-print {
+                display: none !important; /* Hide elements marked with no-print */
+            }
+            /* Ensure table borders are visible when printing */
+            table, th, td {
+                border: 1px solid #ccc !important; /* Use !important to override Tailwind */
+                border-collapse: collapse !important;
+            }
+            th, td {
+                padding: 8px !important; /* Adjust padding for print */
+            }
+            /* Ensure background colors print if browser settings allow */
+            * {
+               -webkit-print-color-adjust: exact !important;   /* Chrome, Safari */
+               color-adjust: exact !important;                 /* Firefox */
+            }
+            /* Remove shadows and adjust margins for print */
+            .print-shadow-none { box-shadow: none !important; }
+            .print-p-0 { padding: 0 !important; }
+            .print-m-0 { margin: 0 !important; }
+        }
+        /* Simple tab styling */
+        .tab-button.active {
+            border-color: #3b82f6; /* blue-500 */
+            color: #3b82f6;
+            font-weight: 600;
+        }
+        /* Ensure logo preview fits */
+        #logo-preview {
+            max-width: 200px;
+            max-height: 100px;
+            object-fit: contain; /* Maintain aspect ratio */
+            display: block; /* Prevents extra space below image */
+            margin-top: 10px;
+        }
+        /* Hide file input visually, but keep it accessible */
+        .hidden-file-input {
+            width: 0.1px;
+            height: 0.1px;
+            opacity: 0;
+            overflow: hidden;
+            position: absolute;
+            z-index: -1;
+        }
+        .custom-file-button {
+            cursor: pointer;
+        }
+        /* Style for remove button */
+        .remove-item-btn {
+            cursor: pointer;
+            color: #ef4444; /* red-500 */
+        }
+        .remove-item-btn:hover {
+            color: #dc2626; /* red-600 */
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md print-shadow-none">
+
+        <div class="flex border-b no-print">
+            <button class="tab-button py-3 px-6 text-gray-600 border-b-2 border-transparent hover:bg-gray-50 focus:outline-none active" data-tab="invoice-builder">Invoice Builder</button>
+            <button class="tab-button py-3 px-6 text-gray-600 border-b-2 border-transparent hover:bg-gray-50 focus:outline-none" data-tab="settings">Settings</button>
+            </div>
+
+        <div>
+            <div id="invoice-builder" class="tab-content p-6 md:p-8">
+                <div id="invoice-print-area" class="print-p-0">
+                    <h2 class="text-2xl font-semibold mb-6 text-center">Invoice / Receipt</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div id="business-details-display">
+                            <img id="invoice-logo" src="https://placehold.co/150x50/e2e8f0/cbd5e0?text=Your+Logo" alt="Business Logo" class="max-h-16 mb-2 object-contain">
+                            <h3 id="invoice-business-name" class="text-xl font-bold">Your Business Name</h3>
+                            <p id="invoice-business-address" class="text-sm text-gray-600">123 Business St, City, Country</p>
+                            <p id="invoice-business-phone" class="text-sm text-gray-600">Phone: (123) 456-7890</p>
+                            <p id="invoice-business-email" class="text-sm text-gray-600">Email: info@business.com</p>
+                        </div>
+                        <div class="md:text-right">
+                            <h4 class="font-semibold mb-2">Bill To:</h4>
+                            <input type="text" id="client-name" placeholder="Client Name" class="block w-full p-2 border rounded mb-2 text-sm md:text-right" data-save="clientName">
+                            <textarea id="client-details" placeholder="Client Address, Contact Info..." class="block w-full p-2 border rounded mb-2 text-sm md:text-right h-20 resize-none" data-save="clientDetails"></textarea>
+                            <div class="flex items-center justify-end">
+                                <label for="invoice-date" class="text-sm mr-2">Date:</label>
+                                <input type="date" id="invoice-date" class="p-2 border rounded text-sm" data-save="invoiceDate">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-8 overflow-x-auto">
+                        <table class="w-full border-collapse border border-gray-300">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="border border-gray-300 p-2 text-left text-sm font-semibold text-gray-700">Item Description</th>
+                                    <th class="border border-gray-300 p-2 text-center text-sm font-semibold text-gray-700 w-20">Qty</th>
+                                    <th class="border border-gray-300 p-2 text-right text-sm font-semibold text-gray-700 w-28">Unit Price</th>
+                                    <th class="border border-gray-300 p-2 text-right text-sm font-semibold text-gray-700 w-32">Total</th>
+                                    <th class="border border-gray-300 p-2 text-center text-sm font-semibold text-gray-700 w-10 no-print"><span class="sr-only">Remove</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoice-items">
+                                <tr class="item-row hidden">
+                                    <td class="border border-gray-300 p-2">
+                                        <input type="text" placeholder="Item Name/Description" class="w-full p-1 border rounded text-sm item-description">
+                                    </td>
+                                    <td class="border border-gray-300 p-2">
+                                        <input type="number" value="1" min="0" step="any" class="w-full p-1 border rounded text-sm text-center item-quantity">
+                                    </td>
+                                    <td class="border border-gray-300 p-2">
+                                        <input type="number" value="0.00" min="0" step="0.01" class="w-full p-1 border rounded text-sm text-right item-price">
+                                    </td>
+                                    <td class="border border-gray-300 p-2 text-right text-sm item-total">0.00</td>
+                                    <td class="border border-gray-300 p-2 text-center no-print">
+                                        <button class="remove-item-btn" title="Remove Item">&times;</button>
+                                    </td>
+                                </tr>
+                                <tr class="item-row">
+                                    <td class="border border-gray-300 p-2">
+                                        <input type="text" placeholder="Item Name/Description" class="w-full p-1 border rounded text-sm item-description">
+                                    </td>
+                                    <td class="border border-gray-300 p-2">
+                                        <input type="number" value="1" min="0" step="any" class="w-full p-1 border rounded text-sm text-center item-quantity">
+                                    </td>
+                                    <td class="border border-gray-300 p-2">
+                                        <input type="number" value="0.00" min="0" step="0.01" class="w-full p-1 border rounded text-sm text-right item-price">
+                                    </td>
+                                    <td class="border border-gray-300 p-2 text-right text-sm item-total">0.00</td>
+                                    <td class="border border-gray-300 p-2 text-center no-print">
+                                        <button class="remove-item-btn" title="Remove Item">&times;</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <button id="add-item-btn" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm no-print">+ Add Item</button>
+                    </div>
+
+                    <div class="flex justify-end mb-8">
+                        <div class="w-full md:w-1/3">
+                            <div class="flex justify-between py-1 border-b">
+                                <span class="text-sm font-medium text-gray-700">Subtotal:</span>
+                                <span id="subtotal" class="text-sm">0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center py-1 border-b">
+                                <label for="discount" class="text-sm font-medium text-gray-700 mr-2">Discount:</label>
+                                <input type="number" id="discount" value="0.00" min="0" step="0.01" class="w-24 p-1 border rounded text-sm text-right" data-save="discount">
+                            </div>
+                             <div class="flex justify-between items-center py-1 border-b">
+                                <label for="tax-percent" class="text-sm font-medium text-gray-700 mr-2">Tax (%):</label>
+                                <input type="number" id="tax-percent" value="0" min="0" step="0.1" class="w-24 p-1 border rounded text-sm text-right" data-save="taxPercent">
+                            </div>
+                            <div class="flex justify-between py-1 border-b">
+                                <span class="text-sm font-medium text-gray-700">Tax Amount:</span>
+                                <span id="tax-amount" class="text-sm">0.00</span>
+                            </div>
+                            <div class="flex justify-between py-2 mt-2 bg-gray-100 px-2 rounded">
+                                <span class="text-lg font-bold">Total:</span>
+                                <span id="grand-total" class="text-lg font-bold">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notes:</label>
+                        <textarea id="notes" placeholder="Optional notes or terms..." class="block w-full p-2 border rounded text-sm h-20 resize-none" data-save="notes"></textarea>
+                     </div>
+
+                </div> <div class="mt-8 flex flex-wrap gap-4 justify-center no-print">
+                    <button id="print-btn" class="px-6 py-2 bg-green-500 text-white rounded hover:bg-green-600">Print Invoice</button>
+                    <button id="save-btn" class="px-6 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">Save Current</button>
+                    <button id="load-btn" class="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">Load Last Saved</button>
+                    <button id="export-json-btn" class="px-6 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">Export as JSON</button>
+                    <label class="custom-file-button px-6 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 cursor-pointer">
+                        Import from JSON
+                        <input type="file" id="import-json-input" accept=".json" class="hidden-file-input">
+                    </label>
+                     <button id="clear-invoice-btn" class="px-6 py-2 bg-red-500 text-white rounded hover:bg-red-600">Clear Invoice</button>
+                </div>
+                <p id="status-message" class="text-center text-sm text-green-600 mt-4 no-print"></p>
+
+            </div><div id="settings" class="tab-content p-6 md:p-8 hidden">
+                <h2 class="text-2xl font-semibold mb-6">Business Settings</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="business-name-input" class="block text-sm font-medium text-gray-700">Business Name</label>
+                        <input type="text" id="business-name-input" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Your Company LLC">
+                    </div>
+                    <div>
+                        <label for="business-address-input" class="block text-sm font-medium text-gray-700">Address</label>
+                        <textarea id="business-address-input" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm resize-none" placeholder="123 Main St, Anytown, USA 12345"></textarea>
+                    </div>
+                    <div>
+                        <label for="business-phone-input" class="block text-sm font-medium text-gray-700">Phone</label>
+                        <input type="tel" id="business-phone-input" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="(555) 123-4567">
+                    </div>
+                    <div>
+                        <label for="business-email-input" class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="business-email-input" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="contact@yourcompany.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Business Logo</label>
+                        <label class="custom-file-button mt-1 inline-block px-4 py-2 bg-gray-200 text-gray-700 rounded border border-gray-300 hover:bg-gray-300 cursor-pointer">
+                            Upload Logo
+                            <input type="file" id="logo-upload" accept="image/*" class="hidden-file-input">
+                        </label>
+                        <img id="logo-preview" src="https://placehold.co/150x50/e2e8f0/cbd5e0?text=Preview" alt="Logo Preview" class="mt-2 border rounded">
+                        <button id="remove-logo-btn" class="mt-2 text-xs text-red-600 hover:underline">Remove Logo</button>
+                    </div>
+                    <div class="pt-4">
+                        <button id="save-settings-btn" class="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Save Settings</button>
+                         <p id="settings-status" class="text-sm text-green-600 mt-2"></p>
+                    </div>
+                </div>
+            </div></div>
+    </div>
+
+    <script>
+        // --- Constants and DOM Elements ---
+        const invoiceItemsTableBody = document.getElementById('invoice-items');
+        const itemRowTemplate = document.querySelector('.item-row.hidden'); // Template row
+        const addItemBtn = document.getElementById('add-item-btn');
+        const subtotalEl = document.getElementById('subtotal');
+        const discountInput = document.getElementById('discount');
+        const taxPercentInput = document.getElementById('tax-percent');
+        const taxAmountEl = document.getElementById('tax-amount');
+        const grandTotalEl = document.getElementById('grand-total');
+        const printBtn = document.getElementById('print-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const loadBtn = document.getElementById('load-btn');
+        const exportJsonBtn = document.getElementById('export-json-btn');
+        const importJsonInput = document.getElementById('import-json-input');
+        const clearInvoiceBtn = document.getElementById('clear-invoice-btn');
+        const statusMessageEl = document.getElementById('status-message');
+        const settingsStatusEl = document.getElementById('settings-status');
+
+        // Settings Elements
+        const businessNameInput = document.getElementById('business-name-input');
+        const businessAddressInput = document.getElementById('business-address-input');
+        const businessPhoneInput = document.getElementById('business-phone-input');
+        const businessEmailInput = document.getElementById('business-email-input');
+        const logoUploadInput = document.getElementById('logo-upload');
+        const logoPreview = document.getElementById('logo-preview');
+        const removeLogoBtn = document.getElementById('remove-logo-btn');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+
+        // Invoice Display Elements (Business Info)
+        const invoiceLogo = document.getElementById('invoice-logo');
+        const invoiceBusinessName = document.getElementById('invoice-business-name');
+        const invoiceBusinessAddress = document.getElementById('invoice-business-address');
+        const invoiceBusinessPhone = document.getElementById('invoice-business-phone');
+        const invoiceBusinessEmail = document.getElementById('invoice-business-email');
+
+        // Tab Elements
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        const defaultLogo = 'https://placehold.co/150x50/e2e8f0/cbd5e0?text=Your+Logo';
+        const localStorageKeys = {
+            SETTINGS: 'invoiceGeneratorSettings',
+            CURRENT_INVOICE: 'invoiceGeneratorCurrentInvoice'
+        };
+
+        // --- Utility Functions ---
+        const formatCurrency = (amount) => {
+            return parseFloat(amount).toFixed(2);
+        };
+
+        const showStatus = (message, element = statusMessageEl, isError = false, duration = 3000) => {
+            element.textContent = message;
+            element.className = `text-center text-sm mt-4 no-print ${isError ? 'text-red-600' : 'text-green-600'}`;
+            setTimeout(() => {
+                element.textContent = '';
+            }, duration);
+        };
+
+        // --- Tab Switching Logic ---
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const targetTab = button.getAttribute('data-tab');
+
+                // Update button styles
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                // Show/hide content
+                tabContents.forEach(content => {
+                    if (content.id === targetTab) {
+                        content.classList.remove('hidden');
+                    } else {
+                        content.classList.add('hidden');
+                    }
+                });
+            });
+        });
+
+        // --- Settings Logic ---
+        const loadSettings = () => {
+            const savedSettings = JSON.parse(localStorage.getItem(localStorageKeys.SETTINGS) || '{}');
+            businessNameInput.value = savedSettings.name || '';
+            businessAddressInput.value = savedSettings.address || '';
+            businessPhoneInput.value = savedSettings.phone || '';
+            businessEmailInput.value = savedSettings.email || '';
+            logoPreview.src = savedSettings.logo || defaultLogo;
+
+            // Update invoice display
+            updateInvoiceBusinessDetails(savedSettings);
+        };
+
+        const saveSettings = () => {
+            const settings = {
+                name: businessNameInput.value.trim(),
+                address: businessAddressInput.value.trim(),
+                phone: businessPhoneInput.value.trim(),
+                email: businessEmailInput.value.trim(),
+                logo: logoPreview.src === defaultLogo ? null : logoPreview.src // Don't save placeholder
+            };
+            localStorage.setItem(localStorageKeys.SETTINGS, JSON.stringify(settings));
+            updateInvoiceBusinessDetails(settings);
+            showStatus('Settings saved successfully!', settingsStatusEl);
+        };
+
+        const updateInvoiceBusinessDetails = (settings) => {
+            invoiceLogo.src = settings.logo || defaultLogo;
+            invoiceBusinessName.textContent = settings.name || 'Your Business Name';
+            invoiceBusinessAddress.textContent = settings.address || '123 Business St, City, Country';
+            invoiceBusinessPhone.textContent = settings.phone ? `Phone: ${settings.phone}` : '';
+            invoiceBusinessEmail.textContent = settings.email ? `Email: ${settings.email}` : '';
+        };
+
+        logoUploadInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    // Basic check for potentially large base64 strings
+                    if (e.target.result.length > 2 * 1024 * 1024) { // ~2MB limit for localStorage safety
+                         showStatus('Logo file might be too large. Consider optimizing.', settingsStatusEl, true, 5000);
+                    }
+                    logoPreview.src = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            } else if (file) {
+                showStatus('Please select a valid image file.', settingsStatusEl, true);
+                logoUploadInput.value = ''; // Clear the input
+            }
+        });
+
+        removeLogoBtn.addEventListener('click', () => {
+            logoPreview.src = defaultLogo;
+            logoUploadInput.value = ''; // Clear the file input
+        });
+
+        saveSettingsBtn.addEventListener('click', saveSettings);
+
+
+        // --- Invoice Calculation Logic ---
+        const calculateItemTotal = (row) => {
+            const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
+            const price = parseFloat(row.querySelector('.item-price').value) || 0;
+            const total = quantity * price;
+            row.querySelector('.item-total').textContent = formatCurrency(total);
+            return total;
+        };
+
+        const calculateGrandTotal = () => {
+            let subtotal = 0;
+            const itemRows = invoiceItemsTableBody.querySelectorAll('.item-row:not(.hidden)'); // Exclude template
+            itemRows.forEach(row => {
+                subtotal += calculateItemTotal(row);
+            });
+
+            const discount = parseFloat(discountInput.value) || 0;
+            const taxPercent = parseFloat(taxPercentInput.value) || 0;
+
+            const subtotalAfterDiscount = subtotal - discount;
+            const taxAmount = subtotalAfterDiscount * (taxPercent / 100);
+            const grandTotal = subtotalAfterDiscount + taxAmount;
+
+            subtotalEl.textContent = formatCurrency(subtotal);
+            taxAmountEl.textContent = formatCurrency(taxAmount);
+            grandTotalEl.textContent = formatCurrency(grandTotal);
+
+            // Auto-save on calculation
+            autoSaveInvoice();
+        };
+
+        // --- Invoice Item Row Management ---
+        const addInvoiceItem = (itemData = null) => {
+            const newRow = itemRowTemplate.cloneNode(true);
+            newRow.classList.remove('hidden');
+
+            // Add event listeners to new row inputs
+            newRow.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', calculateGrandTotal);
+            });
+
+            // Add event listener for remove button
+            newRow.querySelector('.remove-item-btn').addEventListener('click', () => {
+                newRow.remove();
+                calculateGrandTotal();
+            });
+
+            // Populate with data if provided (e.g., from loading)
+            if (itemData) {
+                newRow.querySelector('.item-description').value = itemData.description || '';
+                newRow.querySelector('.item-quantity').value = itemData.quantity || 1;
+                newRow.querySelector('.item-price').value = itemData.price || 0.00;
+            }
+
+            invoiceItemsTableBody.appendChild(newRow);
+            if (!itemData) { // Only recalculate if it's a fresh row add
+               calculateGrandTotal();
+            }
+        };
+
+        addItemBtn.addEventListener('click', () => addInvoiceItem());
+
+        // --- Data Persistence (LocalStorage & JSON) ---
+
+        const getInvoiceData = () => {
+            const items = [];
+            invoiceItemsTableBody.querySelectorAll('.item-row:not(.hidden)').forEach(row => {
+                items.push({
+                    description: row.querySelector('.item-description').value.trim(),
+                    quantity: parseFloat(row.querySelector('.item-quantity').value) || 0,
+                    price: parseFloat(row.querySelector('.item-price').value) || 0,
+                });
+            });
+
+            const data = {
+                clientName: document.getElementById('client-name').value.trim(),
+                clientDetails: document.getElementById('client-details').value.trim(),
+                invoiceDate: document.getElementById('invoice-date').value,
+                items: items,
+                discount: parseFloat(discountInput.value) || 0,
+                taxPercent: parseFloat(taxPercentInput.value) || 0,
+                notes: document.getElementById('notes').value.trim(),
+                // We don't save calculated totals, they are derived
+            };
+            return data;
+        };
+
+        const loadInvoiceData = (data) => {
+            if (!data) return;
+
+            // Clear existing items before loading new ones
+            invoiceItemsTableBody.querySelectorAll('.item-row:not(.hidden)').forEach(row => row.remove());
+
+            document.getElementById('client-name').value = data.clientName || '';
+            document.getElementById('client-details').value = data.clientDetails || '';
+            document.getElementById('invoice-date').value = data.invoiceDate || new Date().toISOString().slice(0, 10);
+            discountInput.value = formatCurrency(data.discount || 0);
+            taxPercentInput.value = data.taxPercent || 0;
+            document.getElementById('notes').value = data.notes || '';
+
+
+            if (data.items && data.items.length > 0) {
+                data.items.forEach(item => addInvoiceItem(item));
+            } else {
+                 // Ensure at least one empty row if loaded data has no items
+                 addInvoiceItem();
+            }
+
+            calculateGrandTotal(); // Recalculate totals after loading
+        };
+
+        const autoSaveInvoice = () => {
+            const data = getInvoiceData();
+            localStorage.setItem(localStorageKeys.CURRENT_INVOICE, JSON.stringify(data));
+            // console.log("Autosaved invoice data."); // Optional: for debugging
+        };
+
+        const loadLastSavedInvoice = () => {
+            const savedData = localStorage.getItem(localStorageKeys.CURRENT_INVOICE);
+            if (savedData) {
+                try {
+                    loadInvoiceData(JSON.parse(savedData));
+                    showStatus('Loaded last auto-saved invoice.');
+                } catch (e) {
+                    console.error("Error parsing saved invoice data:", e);
+                    showStatus('Could not load saved invoice data.', statusMessageEl, true);
+                }
+            } else {
+                showStatus('No saved invoice data found.');
+            }
+        };
+
+        const clearInvoice = () => {
+             if (confirm('Are you sure you want to clear the current invoice? This cannot be undone.')) {
+                // Reset fields marked with data-save attribute
+                document.querySelectorAll('[data-save]').forEach(el => {
+                    if (el.type === 'number') el.value = el.id === 'tax-percent' ? '0' : '0.00';
+                    else if (el.type === 'date') el.value = new Date().toISOString().slice(0, 10);
+                    else el.value = '';
+                });
+
+                // Remove all item rows except the template
+                invoiceItemsTableBody.querySelectorAll('.item-row:not(.hidden)').forEach(row => row.remove());
+                // Add back one empty row
+                addInvoiceItem();
+
+                // Recalculate (which also triggers autosave of the cleared state)
+                calculateGrandTotal();
+                showStatus('Invoice cleared.');
+            }
+        };
+
+
+        // --- Action Buttons ---
+        printBtn.addEventListener('click', () => {
+            window.print();
+        });
+
+        saveBtn.addEventListener('click', () => {
+             autoSaveInvoice(); // Ensure latest data is saved
+             showStatus('Current invoice state saved.');
+        });
+
+        loadBtn.addEventListener('click', loadLastSavedInvoice);
+        clearInvoiceBtn.addEventListener('click', clearInvoice);
+
+
+        exportJsonBtn.addEventListener('click', () => {
+            const data = getInvoiceData();
+            const dataStr = JSON.stringify(data, null, 2); // Pretty print JSON
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+
+            const exportFileDefaultName = `invoice_${data.invoiceDate || 'data'}.json`;
+
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+            linkElement.remove();
+            showStatus('Invoice exported as JSON.');
+        });
+
+        importJsonInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file && file.type === 'application/json') {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        // Basic validation (check if it looks like our data structure)
+                        if (importedData && typeof importedData === 'object' && Array.isArray(importedData.items)) {
+                             if (confirm('Importing this file will overwrite the current invoice. Continue?')) {
+                                loadInvoiceData(importedData);
+                                showStatus('Invoice imported successfully.');
+                                autoSaveInvoice(); // Save the imported data as current
+                            }
+                        } else {
+                           showStatus('Invalid JSON file format.', statusMessageEl, true);
+                        }
+                    } catch (error) {
+                        console.error("Error parsing JSON file:", error);
+                        showStatus('Error reading or parsing JSON file.', statusMessageEl, true);
+                    } finally {
+                         // Reset file input to allow importing the same file again
+                         importJsonInput.value = '';
+                    }
+                };
+                reader.readAsText(file);
+            } else if (file) {
+                showStatus('Please select a valid .json file.', statusMessageEl, true);
+                importJsonInput.value = ''; // Reset file input
+            }
+        });
+
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load settings first
+            loadSettings();
+
+            // Set default date
+            if (!document.getElementById('invoice-date').value) {
+                 document.getElementById('invoice-date').value = new Date().toISOString().slice(0, 10);
+            }
+
+            // Add event listeners to initial elements that affect totals
+            invoiceItemsTableBody.querySelectorAll('.item-row:not(.hidden) input').forEach(input => {
+                 input.addEventListener('input', calculateGrandTotal);
+            });
+             invoiceItemsTableBody.querySelectorAll('.item-row:not(.hidden) .remove-item-btn').forEach(button => {
+                 button.addEventListener('click', (e) => {
+                    // Prevent removing the last row directly, maybe? Or just allow it.
+                    // For simplicity, allow removing all rows. User can add one back.
+                    e.target.closest('.item-row').remove();
+                    calculateGrandTotal();
+                });
+            });
+            discountInput.addEventListener('input', calculateGrandTotal);
+            taxPercentInput.addEventListener('input', calculateGrandTotal);
+
+            // Add listeners for auto-saving other fields
+            document.querySelectorAll('[data-save]').forEach(el => {
+                el.addEventListener('input', autoSaveInvoice);
+                el.addEventListener('change', autoSaveInvoice); // For date input
+            });
+
+
+            // Load last saved invoice data on initial load (optional, uncomment if desired)
+            // loadLastSavedInvoice();
+
+             // Ensure initial calculation is done if there are default values
+             calculateGrandTotal();
+
+             // Add at least one item row if none exist after potential load
+             if (invoiceItemsTableBody.querySelectorAll('.item-row:not(.hidden)').length === 0) {
+                 addInvoiceItem();
+             }
+        });
+
+    </script>
+
+</body>
+</html>
